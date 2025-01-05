@@ -25,6 +25,8 @@ class TrashController extends Controller
             'picture' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
+        $urlPredicted = "http://127.0.0.1:5000/predict";
+
         if ($validator->fails()) {
             Alert::error('Error', $validator->errors()->first());
             return redirect()->back()->withErrors($validator)->withInput();
@@ -34,14 +36,37 @@ class TrashController extends Controller
 
         $userId = Auth::id();
 
-        $labelOptions = ['organic', 'anorganic'];
-        $label = Arr::random($labelOptions);
+        $file = new \CURLFile(storage_path("app/public/" . $imagePath));
+        $data = [
+            'file' => $file,
+        ];
 
-        $co = 0;
-        if ($label === 'organic') {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $urlPredicted);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if ($response === false) {
+            Alert::error('Error', 'Gagal melakukan prediksi');
+            return redirect()->back();
+        }
+
+        $responseData = json_decode($response, true);
+        $predictedClass = $responseData['predicted_class'] ?? null;
+
+        if ($predictedClass == 0) {
+            $label = 'organic';
             $co = 0.1;
-        } else if ($label === 'anorganic') {
+        } elseif ($predictedClass == 1) {
+            $label = 'anorganic';
             $co = 0.2;
+        } else {
+            $label = 'unknown';
+            $co = 0.0;
         }
 
         Trash::create([
